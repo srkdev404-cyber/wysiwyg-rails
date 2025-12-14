@@ -1,0 +1,72 @@
+name: Auto Release wysiwyg-rails
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create_release:
+    if: >
+      github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Check merge commit message for release flag
+        id: check_message
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const sha = context.payload.pull_request.merge_commit_sha;
+            const commit = await github.rest.repos.getCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: sha
+            });
+            const msg = commit.data.commit.message;
+            const isRelease = /release:\s*yes/i.test(msg);
+            core.setOutput("release", isRelease ? "true" : "false");
+
+      - name: Stop if no release flag
+        if: steps.check_message.outputs.release == 'false'
+        run: exit 0
+
+      - name: Checkout main
+        uses: actions/checkout@v4
+
+      - name: Read gem version
+        id: version
+        run: |
+          VERSION=$(grep -Eo "[0-9]+\.[0-9]+\.[0-9]+" lib/wysiwyg-rails/version.rb)
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.1"
+
+      - name: Build gem
+        run: |
+          gem build wysiwyg-rails.gemspec
+
+      - name: Publish gem to RubyGems
+        env:
+          RUBYGEMS_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
+        run: |
+          gem push wysiwyg-rails-$VERSION.gem --key rubygems_api_key
+
+      - name: Create GitHub release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: "v${{ env.VERSION }}"
+          release_name: "Release v${{ env.VERSION }}"
+          body: "Auto-released Ruby gem v${{ env.VERSION }}"
