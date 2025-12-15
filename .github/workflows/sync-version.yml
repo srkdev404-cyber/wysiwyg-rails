@@ -1,4 +1,4 @@
-name: Sync Version for wysiwyg-rails
+name: Sync Version (Reusable)
 
 on:
   repository_dispatch:
@@ -9,73 +9,68 @@ permissions:
   pull-requests: write
 
 jobs:
-  sync_version:
+  sync:
     runs-on: ubuntu-latest
-    environment: PAT   # 👈 enables environment secret PAT
+    environment: PAT
 
     steps:
-      - name: Checkout repository
+      - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.PAT }}   # 👈 use PAT explicitly
+          token: ${{ secrets.PAT }}
 
-      - name: Load incoming version
+      - name: Load payload
         run: |
           echo "VERSION=${{ github.event.client_payload.version }}" >> $GITHUB_ENV
-          echo "Incoming version: $VERSION"
+          echo "STAGE=${{ github.event.client_payload.stage || 'staging' }}" >> $GITHUB_ENV
 
-      - name: Read current version from version.rb
+      - name: Read local version
         run: |
           CURRENT=$(grep -Eo "[0-9]+\.[0-9]+\.[0-9]+" lib/wysiwyg-rails/version.rb)
           echo "CURRENT_VERSION=$CURRENT" >> $GITHUB_ENV
-          echo "Local: $CURRENT | Incoming: $VERSION"
 
-      - name: Compare versions
+      - name: Decide execution
         run: |
           if [ "$VERSION" = "$CURRENT_VERSION" ]; then
-            echo "SHOULD_RUN=false" >> $GITHUB_ENV
+            echo "RUN=false" >> $GITHUB_ENV
           else
-            echo "SHOULD_RUN=true" >> $GITHUB_ENV
+            echo "RUN=true" >> $GITHUB_ENV
           fi
 
-      # --------------------------------------------
-      # Only runs when version changes
-      # --------------------------------------------
-
-      - name: Create update branch
-        if: env.SHOULD_RUN == 'true'
+      - name: Create branch
+        if: env.RUN == 'true'
         run: |
-          BRANCH="sync-version-v${VERSION}"
+          BRANCH="sync/${STAGE}/v${VERSION}"
           git checkout -b "$BRANCH"
           echo "BRANCH=$BRANCH" >> $GITHUB_ENV
 
       - name: Update version.rb
-        if: env.SHOULD_RUN == 'true'
+        if: env.RUN == 'true'
         run: |
           sed -i "s/[0-9]\+\.[0-9]\+\.[0-9]\+/$VERSION/" lib/wysiwyg-rails/version.rb
 
-      - name: Update assets from dist
-        if: env.SHOULD_RUN == 'true'
+      - name: Update assets
+        if: env.RUN == 'true'
         run: |
           rm -rf app/assets/*
           cp -R dist/* app/assets/
 
-      - name: Commit and push changes
-        if: env.SHOULD_RUN == 'true'
+      - name: Commit and push
+        if: env.RUN == 'true'
         run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "ci-bot@github.com"
+          git config user.name "CI Bot"
+          git config user.email "ci@github.com"
           git add .
-          git commit -m "chore: sync to v${VERSION}"
+          git commit -m "chore(${STAGE}): sync v${VERSION}"
           git push origin "$BRANCH"
 
-      - name: Create Pull Request
-        if: env.SHOULD_RUN == 'true'
+      - name: Open PR
+        if: env.RUN == 'true'
         env:
-          GH_TOKEN: ${{ secrets.PAT }}   # 👈 PAT instead of GITHUB_TOKEN
+          GH_TOKEN: ${{ secrets.PAT }}
         run: |
           gh pr create \
-            --base main \
+            --base master \
             --head "$BRANCH" \
-            --title "Sync version to v${VERSION}" \
-            --body "Auto-synced version + assets"
+            --title "[${STAGE}] Sync v${VERSION}" \
+            --body "Auto sync for **${STAGE}** environment."
