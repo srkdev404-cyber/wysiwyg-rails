@@ -34,7 +34,7 @@ Initialize editor by adding below in body of index.html.erb
    
   })
 ```
-## Options
+## Options 
 You can pass options to editor by including these in index.html.erb
 ```
 new FroalaEditor('#editor', {
