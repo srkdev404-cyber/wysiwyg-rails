@@ -56,3 +56,4 @@ jobs:
           base: master
           title: "Sync Version ${{ env.VERSION }}"
           body: "Automated version sync for Rails gem."
+          commit-message: "chore: sync version ${{ env.VERSION }}"
