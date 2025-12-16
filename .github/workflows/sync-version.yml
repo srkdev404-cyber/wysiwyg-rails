@@ -1,8 +1,8 @@
-name: Sync Version – Rails SDK
+name: Sync Version (Rails)
 
 on:
   repository_dispatch:
-    types: [sync-version]
+    types: [version_update]
 
 permissions:
   contents: write
@@ -13,29 +13,46 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository (FIXED)
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.PAT }}
 
-      - name: Load version
+      - name: Read version from dispatch
         run: |
-          echo "VERSION=${{ github.event.client_payload.version }}" >> $GITHUB_ENV
+          VERSION="${{ github.event.client_payload.version }}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Create branch
+      - name: Update version in version.rb
         run: |
-          BRANCH="sync-v${VERSION}"
-          git checkout -b "$BRANCH"
-          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+          FILE="lib/wysiwyg-rails/version.rb"
+          if [ ! -f "$FILE" ]; then
+            echo "Version file missing!"
+            exit 1
+          fi
+          
+          IFS='.' read -r MAJOR MINOR TINY <<< "${{ env.VERSION }}"
+          sed -i "s/Major = .*/Major = ${MAJOR}/" $FILE
+          sed -i "s/Minor = .*/Minor = ${MINOR}/" $FILE
+          sed -i "s/Tiny = .*/Tiny = ${TINY}/"   $FILE
+          echo "Rails version updated to ${{ env.VERSION }}"
 
-      - name: Update version.rb
+      - name: Create sync branch
         run: |
-          sed -i "s/[0-9]\+\.[0-9]\+\.[0-9]\+/$VERSION/" lib/wysiwyg-rails/version.rb
-
-      - name: Commit and push
-        run: |
-          git config user.name "srkdev404-cyber"
-          git config user.email "srkdev404@gmail.com"
+          git checkout -B sync-${{ env.VERSION }}
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
           git add .
-          git commit -m "chore: sync v${VERSION}"
-          git push origin "$BRANCH"
+          git commit -m "chore: sync version ${{ env.VERSION }}" || echo "No changes"
+
+      - name: Push sync branch (force)
+        run: git push origin sync-${{ env.VERSION }} --force
+
+      - name: Create PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.PPAT }}
+          branch: sync-${{ env.VERSION }}
+          base: master
+          title: "Sync Version ${{ env.VERSION }}"
+          body: "Automated version sync for Rails gem."
