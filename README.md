@@ -14,7 +14,6 @@ Add this to your Gemfile:
 ```ruby
 gem "wysiwyg-rails"
 ```
-
 and run `bundle install`.
 ## Usage
 In your index.html.erb add
