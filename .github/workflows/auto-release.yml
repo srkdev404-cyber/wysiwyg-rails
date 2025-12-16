@@ -3,7 +3,8 @@ name: Auto Release (Rails)
 on:
   pull_request:
     types: [closed]
-    branches: [master]
+    branches:
+      - master
 
 permissions:
   contents: write
@@ -15,7 +16,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
       - name: Check release intent (release: yes)
         id: check
         uses: actions/github-script@v6
@@ -23,7 +23,7 @@ jobs:
           github-token: ${{ secrets.PAT }}
           script: |
             const msg = context.payload.pull_request.title + " " +
-                        context.payload.pull_request.body;
+              context.payload.pull_request.body;
             const isRelease = /release:\s*yes/i.test(msg);
             core.setOutput("release", isRelease ? "true" : "false");
 
@@ -40,34 +40,7 @@ jobs:
         id: readver
         run: |
           FILE="lib/wysiwyg-rails/version.rb"
-          MAJOR=$(grep -Eo 'Major\s*=\s*[0-9]+' $FILE | grep -Eo '[0-9]+')
-          MINOR=$(grep -Eo 'Minor\s*=\s*[0-9]+' $FILE | grep -Eo '[0-9]+')
-          TINY=$(grep -Eo 'Tiny\s*=\s*[0-9]+'  $FILE | grep -Eo '[0-9]+')
+          MAJOR=$(grep -Eo 'Major\s*=\s*[0-9]+' "$FILE" | grep -Eo '[0-9]+')
+          MINOR=$(grep -Eo 'Minor\s*=\s*[0-9]+' "$FILE" | grep -Eo '[0-9]+')
+          TINY=$(grep -Eo 'Tiny\s*=\s*[0-9]+' "$FILE" | grep -Eo '[0-9]+')
           VERSION="${MAJOR}.${MINOR}.${TINY}"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Detected version: $VERSION"
-
-      - name: Install Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.1'
-
-      - name: Build gem
-        run: gem build wysiwyg-rails.gemspec
-
-      - name: Push gem to RubyGems
-        env:
-          RUBYGEMS_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
-        run: |
-          echo ":rubygems_api_key: $RUBYGEMS_API_KEY" > ~/.gem/credentials
-          chmod 600 ~/.gem/credentials
-          gemFile=$(ls *.gem | head -n 1)
-          gem push "$gemFile"
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: "v${{ env.VERSION }}"
-          name: "Rails Release ${{ env.VERSION }}"
-        env:
-          GITHUB_TOKEN: ${{ secrets.PAT }}
