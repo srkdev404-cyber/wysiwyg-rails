@@ -1,4 +1,5 @@
-name: Auto Release (Rails)
+
+name: Auto Release (Reusable)
 
 on:
   pull_request:
@@ -14,45 +15,57 @@ jobs:
   release:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    environment: PAT
 
     steps:
-      - name: Check release intent
-        id: check
+      - name: Validate release intent
+        id: validate
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.PAT }}
           script: |
-            const msg = context.payload.pull_request.title + " " +
-              context.payload.pull_request.body;
+            const sha = context.payload.pull_request.merge_commit_sha;
+            const commit = await github.rest.repos.getCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: sha
+            });
+            const msg = commit.data.commit.message;
             const isRelease = /release:\s*yes/i.test(msg);
             core.setOutput("release", isRelease ? "true" : "false");
 
-      - name: Stop if not release
-        if: steps.check.outputs.release == 'false'
+      - name: Stop if not a release
+        if: steps.validate.outputs.release == 'false'
         run: exit 0
 
-      - name: Checkout
+      - name: Checkout master
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.PAT }}
 
-      - name: Read version.rb
-        id: readver
+      - name: Extract version
         run: |
-          FILE="lib/wysiwyg-rails/version.rb"
-          MAJOR=$(grep -Eo 'Major = [0-9]+' "$FILE" | grep -Eo '[0-9]+')
-          MINOR=$(grep -Eo 'Minor = [0-9]+' "$FILE" | grep -Eo '[0-9]+')
-          TINY=$(grep -Eo 'Tiny = [0-9]+' "$FILE" | grep -Eo '[0-9]+')
-          VERSION="${MAJOR}.${MINOR}.${TINY}"
+          VERSION=$(grep -Eo "[0-9]+\.[0-9]+\.[0-9]+" lib/wysiwyg-rails/version.rb)
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      - name: Build gem
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.1"
+
+      - name: Build gem (no publish)
         run: gem build wysiwyg-rails.gemspec
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: "v${{ env.VERSION }}"
-          name: "Rails Release ${{ env.VERSION }}"
+        uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.PAT }}
+        with:
+          tag_name: "v${{ env.VERSION }}"
+          release_name: "Release v${{ env.VERSION }}"
+          body: |
+            Private release for wysiwyg-rails
+            ✔ Version synced
+            ✔ Assets updated
+            ✔ Gem built
+            ✖ Gem not published
