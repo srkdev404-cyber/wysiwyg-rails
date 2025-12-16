@@ -1,4 +1,4 @@
-name: Sync Version (Rails)
+name: Sync Version – wysiwyg-rails
 
 on:
   repository_dispatch:
@@ -11,49 +11,44 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    environment: PAT
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.PAT }}
 
-      - name: Read version from dispatch
+      - name: Load version from dispatch
         run: |
-          VERSION="${{ github.event.client_payload.version }}"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION=${{ github.event.client_payload.version }}" >> $GITHUB_ENV
+          echo "Incoming version: $VERSION"
 
-      - name: Update version in version.rb
+      - name: Create release branch
         run: |
-          FILE="lib/wysiwyg-rails/version.rb"
-          if [ ! -f "$FILE" ]; then
-            echo "Version file missing!"
-            exit 1
-          fi
-          
-          IFS='.' read -r MAJOR MINOR TINY <<< "${{ env.VERSION }}"
-          sed -i "s/Major = .*/Major = ${MAJOR}/" $FILE
-          sed -i "s/Minor = .*/Minor = ${MINOR}/" $FILE
-          sed -i "s/Tiny = .*/Tiny = ${TINY}/"   $FILE
-          echo "Rails version updated to ${{ env.VERSION }}"
+          BRANCH="release-v${VERSION}"
+          git checkout -b "$BRANCH"
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
 
-      - name: Create sync branch
+      - name: Update version.rb
         run: |
-          git checkout -B sync-${{ env.VERSION }}
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add .
-          git commit -m "chore: sync version ${{ env.VERSION }}" || echo "No changes"
+          sed -i "s/[0-9]\+\.[0-9]\+\.[0-9]\+/$VERSION/" \
+            lib/wysiwyg-rails/version.rb
 
-      - name: Push sync branch (force)
-        run: git push origin sync-${{ env.VERSION }} --force
+      - name: Commit and push
+        run: |
+          git config user.name "CI Bot"
+          git config user.email "ci@github.com"
+          git add lib/wysiwyg-rails/version.rb
+          git commit -m "chore: bump version to v${VERSION}"
+          git push origin "$BRANCH"
 
-      - name: Create PR
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ secrets.PAT }}
-          branch: sync-${{ env.VERSION }}
-          base: master
-          title: "Sync Version ${{ env.VERSION }}"
-          body: "Automated version sync for Rails gem."
-          commit-message: "chore: sync version ${{ env.VERSION }}"
+      - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
+        run: |
+          gh pr create \
+            --base master \
+            --head "$BRANCH" \
+            --title "Release v${VERSION}" \
+            --body "Automated version bump to v${VERSION}"
