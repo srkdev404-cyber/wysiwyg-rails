@@ -1,52 +1,30 @@
-
-name: Auto Release (Reusable)
+name: Auto Release – wysiwyg-rails
 
 on:
-  pull_request:
-    types: [closed]
+  push:
     branches:
       - master
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   release:
-    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     environment: PAT
 
     steps:
-      - name: Validate release intent
-        id: validate
-        uses: actions/github-script@v6
-        with:
-          github-token: ${{ secrets.PAT }}
-          script: |
-            const sha = context.payload.pull_request.merge_commit_sha;
-            const commit = await github.rest.repos.getCommit({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: sha
-            });
-            const msg = commit.data.commit.message;
-            const isRelease = /release:\s*yes/i.test(msg);
-            core.setOutput("release", isRelease ? "true" : "false");
-
-      - name: Stop if not a release
-        if: steps.validate.outputs.release == 'false'
-        run: exit 0
-
       - name: Checkout master
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.PAT }}
 
-      - name: Extract version
+      - name: Read version
         run: |
-          VERSION=$(grep -Eo "[0-9]+\.[0-9]+\.[0-9]+" lib/wysiwyg-rails/version.rb)
+          VERSION=$(grep -Eo "[0-9]+\.[0-9]+\.[0-9]+" \
+            lib/wysiwyg-rails/version.rb)
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Releasing version: $VERSION"
 
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
@@ -54,18 +32,24 @@ jobs:
           ruby-version: "3.1"
 
       - name: Build gem (no publish)
-        run: gem build wysiwyg-rails.gemspec
+        run: |
+          gem build wysiwyg-rails.gemspec
+
+      - name: Create git tag
+        run: |
+          TAG="rails-v${VERSION}"
+          git tag "$TAG"
+          git push origin "$TAG"
 
       - name: Create GitHub Release
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.PAT }}
         with:
-          tag_name: "v${{ env.VERSION }}"
-          release_name: "Release v${{ env.VERSION }}"
+          tag_name: "rails-v${{ env.VERSION }}"
+          release_name: "wysiwyg-rails v${{ env.VERSION }}"
           body: |
-            Private release for wysiwyg-rails
-            ✔ Version synced
-            ✔ Assets updated
+            ✔ Version updated
             ✔ Gem built
-            ✖ Gem not published
+            ✖ Gem NOT published (PAT-only setup)
+
