@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Check release intent (release: yes)
         id: check
         uses: actions/github-script@v6
@@ -36,6 +37,7 @@ jobs:
           token: ${{ secrets.PAT }}
 
       - name: Read version.rb
+        id: readver
         run: |
           FILE="lib/wysiwyg-rails/version.rb"
           MAJOR=$(grep -Eo 'Major\s*=\s*[0-9]+' $FILE | grep -Eo '[0-9]+')
@@ -43,6 +45,7 @@ jobs:
           TINY=$(grep -Eo 'Tiny\s*=\s*[0-9]+'  $FILE | grep -Eo '[0-9]+')
           VERSION="${MAJOR}.${MINOR}.${TINY}"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Detected version: $VERSION"
 
       - name: Install Ruby
         uses: ruby/setup-ruby@v1
