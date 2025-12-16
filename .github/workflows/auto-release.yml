@@ -44,3 +44,30 @@ jobs:
           MINOR=$(grep -Eo 'Minor\s*=\s*[0-9]+' "$FILE" | grep -Eo '[0-9]+')
           TINY=$(grep -Eo 'Tiny\s*=\s*[0-9]+' "$FILE" | grep -Eo '[0-9]+')
           VERSION="${MAJOR}.${MINOR}.${TINY}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Detected version: $VERSION"
+
+      - name: Install Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.1'
+
+      - name: Build gem
+        run: gem build wysiwyg-rails.gemspec
+
+      - name: Publish gem to RubyGems
+        env:
+          RUBYGEMS_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
+        run: |
+          echo ":rubygems_api_key: $RUBYGEMS_API_KEY" > ~/.gem/credentials
+          chmod 600 ~/.gem/credentials
+          gemFile=$(ls *.gem | head -n 1)
+          gem push "$gemFile"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: "v${{ env.VERSION }}"
+          name: "Rails Release v${{ env.VERSION }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT }}
