@@ -47,15 +47,22 @@ jobs:
 
       # ----------------------------------------
       # Read version.rb
-      # ----------------------------------------
-      - name: Read version
+      - name: Read version from version.rb
         run: |
           FILE="lib/wysiwyg-rails/version.rb"
-          MAJOR=$(grep -Eo 'Major\s*=\s*[0-9]+' "$FILE" | grep -Eo '[0-9]+')
-          MINOR=$(grep -Eo 'Minor\s*=\s*[0-9]+' "$FILE" | grep -Eo '[0-9]+')
-          TINY=$(grep -Eo 'Tiny\s*=\s*[0-9]+' "$FILE" | grep -Eo '[0-9]+')
-          VERSION="${MAJOR}.${MINOR}.${TINY}"
+
+          VERSION=$(ruby -e "
+            content = File.read('$FILE')
+            if content =~ /VERSION\s*=\s*['\"]([^'\"]+)['\"]/
+              puts \$1
+            else
+              exit 1
+            end
+          ")
+
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Detected version: $VERSION"
+
 
       # ----------------------------------------
       # Setup Ruby
