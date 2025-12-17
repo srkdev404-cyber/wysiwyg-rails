@@ -14,7 +14,7 @@ jobs:
     environment: PAT
 
     steps:
-      - name: Checkout repository
+      - name: Checkout Rails repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.PAT }}
@@ -30,6 +30,20 @@ jobs:
           git checkout -b "$BRANCH"
           echo "BRANCH=$BRANCH" >> $GITHUB_ENV
 
+      # -------------------------------------------------
+      # Sync JS/CSS from main repo
+      # -------------------------------------------------
+      - name: Sync JS/CSS from main repo into app/assets
+        run: |
+          echo "Cloning main repo..."
+          git clone --depth 1 https://github.com/srkdev404-cyber/wysiwyg-editor-main.git /tmp/wysiwyg-main
+
+          echo "Syncing JavaScript files..."
+          rsync -av --delete /tmp/wysiwyg-main/js/ app/assets/javascripts/
+
+          echo "Syncing CSS files..."
+          rsync -av --delete /tmp/wysiwyg-main/css/ app/assets/stylesheets/
+
       - name: Update version.rb
         run: |
           sed -i "s/[0-9]\+\.[0-9]\+\.[0-9]\+/$VERSION/" \
@@ -39,8 +53,11 @@ jobs:
         run: |
           git config user.name "CI Bot"
           git config user.email "ci@github.com"
-          git add lib/wysiwyg-rails/version.rb
-          git commit -m "chore: bump version to v${VERSION}"
+          git add \
+            lib/wysiwyg-rails/version.rb \
+            app/assets/javascripts \
+            app/assets/stylesheets
+          git commit -m "chore: bump version to v${VERSION} and sync JS/CSS assets"
           git push origin "$BRANCH"
 
       - name: Create Pull Request
@@ -51,4 +68,4 @@ jobs:
             --base master \
             --head "$BRANCH" \
             --title "Release v${VERSION}" \
-            --body "Automated version bump to v${VERSION}"
+            --body "Automated version bump to v${VERSION} and asset sync from main repo"
