@@ -34,20 +34,22 @@ jobs:
       # Sync JS/CSS from main repo
       # -------------------------------------------------
       - name: Sync JS/CSS from main repo into app/assets
+        env:
+          MAIN_REPO_PAT: ${{ secrets.PAT }}
         run: |
-          echo "Cloning main repo..."
-          git clone --depth 1 https://github.com/srkdev404-cyber/wysiwyg-editor-main.git /tmp/wysiwyg-main
+          set -e
+
+          echo "Cloning main repo with authentication..."
+
+          git clone --depth 1 \
+            https://x-access-token:${MAIN_REPO_PAT}@github.com/srkdev404-cyber/wysiwyg-editor-main.git \
+            /tmp/wysiwyg-main
 
           echo "Syncing JavaScript files..."
           rsync -av --delete /tmp/wysiwyg-main/js/ app/assets/javascripts/
 
           echo "Syncing CSS files..."
           rsync -av --delete /tmp/wysiwyg-main/css/ app/assets/stylesheets/
-
-      - name: Update version.rb
-        run: |
-          sed -i "s/[0-9]\+\.[0-9]\+\.[0-9]\+/$VERSION/" \
-            lib/wysiwyg-rails/version.rb
 
       - name: Commit and push
         run: |
