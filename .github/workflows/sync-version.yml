@@ -79,7 +79,7 @@ jobs:
           git config user.name "srkdev404-cyber"
           git config user.email "srkdev404@gmail.com"
 
-          git add \rkdev
+          git add \
             lib/wysiwyg-rails/version.rb \
             app/assets/javascripts \
             app/assets/stylesheets
