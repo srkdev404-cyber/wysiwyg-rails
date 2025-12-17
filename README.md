@@ -40,7 +40,6 @@ new FroalaEditor('#editor', {
 options :  value
 });
 ```
-
 ## Include in assets
 
 In your `application.css.scss`, include the css file:
