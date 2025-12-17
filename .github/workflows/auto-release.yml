@@ -15,6 +15,7 @@ jobs:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     environment: PAT
+
     steps:
       # ----------------------------------------
       # Require "release: yes"
@@ -46,23 +47,20 @@ jobs:
           token: ${{ secrets.PAT }}
 
       # ----------------------------------------
-      # Read version.rb
-      - name: Read version from version.rb
+      # Read version safely (Ruby-based)
+      # ----------------------------------------
+      - name: Read version
         run: |
-          FILE="lib/wysiwyg-rails/version.rb"
-
           VERSION=$(ruby -e "
-            content = File.read('$FILE')
+            content = File.read('lib/wysiwyg-rails/version.rb')
             if content =~ /VERSION\s*=\s*['\"]([^'\"]+)['\"]/
               puts \$1
             else
               exit 1
             end
           ")
-
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Detected version: $VERSION"
-
+          echo "Version: $VERSION"
 
       # ----------------------------------------
       # Setup Ruby
@@ -73,33 +71,20 @@ jobs:
           ruby-version: '3.1'
 
       # ----------------------------------------
-      # Build gem
+      # Build gem ONLY (no push)
       # ----------------------------------------
       - name: Build gem
         run: gem build wysiwyg-rails.gemspec
 
       # ----------------------------------------
-      # Push gem to RubyGems
-      # ----------------------------------------
-      - name: Publish gem to RubyGems
-        env:
-          RUBYGEMS_API_KEY: ${{ secrets.RUBYGEMS_API_KEY }}
-        run: |
-          mkdir -p ~/.gem
-          echo ":rubygems_api_key: $RUBYGEMS_API_KEY" > ~/.gem/credentials
-          chmod 600 ~/.gem/credentials
-
-          GEM_FILE=$(ls wysiwyg-rails-*.gem | head -n 1)
-          gem push "$GEM_FILE"
-
-      # ----------------------------------------
-      # Create GitHub Release
+      # Create GitHub Release and attach gem
       # ----------------------------------------
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: "rails-v${{ env.VERSION }}"
           name: "Rails Release v${{ env.VERSION }}"
+          files: "*.gem"
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.PAT }}
