@@ -8,7 +8,6 @@
 >wysiwyg-rails provides the [Froala WYSIWYG HTML Editor](https://froala.com/wysiwyg-editor) javascript and stylesheets as a Rails engine for use with the asset pipeline.
 
 ## Installation
-
 Add this to your Gemfile:
 
 ```ruby
