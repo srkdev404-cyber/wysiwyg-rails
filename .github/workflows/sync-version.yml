@@ -14,16 +14,25 @@ jobs:
     environment: PAT
 
     steps:
+      # -------------------------------------------------
+      # Checkout Child-A (Rails) repository
+      # -------------------------------------------------
       - name: Checkout Rails repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.PAT }}
 
+      # -------------------------------------------------
+      # Load version from dispatch payload
+      # -------------------------------------------------
       - name: Load version from dispatch
         run: |
           echo "VERSION=${{ github.event.client_payload.version }}" >> $GITHUB_ENV
           echo "Incoming version: $VERSION"
 
+      # -------------------------------------------------
+      # Create release branch
+      # -------------------------------------------------
       - name: Create release branch
         run: |
           BRANCH="release-v${VERSION}"
@@ -31,7 +40,15 @@ jobs:
           echo "BRANCH=$BRANCH" >> $GITHUB_ENV
 
       # -------------------------------------------------
-      # Sync JS/CSS from main repo
+      # Update Rails version.rb
+      # -------------------------------------------------
+      - name: Update version.rb
+        run: |
+          sed -i "s/[0-9]\+\.[0-9]\+\.[0-9]\+/$VERSION/" \
+            lib/wysiwyg-rails/version.rb
+
+      # -------------------------------------------------
+      # Sync JS/CSS from main repo AFTER version update
       # -------------------------------------------------
       - name: Sync JS/CSS from main repo into app/assets
         env:
@@ -40,28 +57,39 @@ jobs:
           set -e
 
           echo "Cloning main repo with authentication..."
-
           git clone --depth 1 \
             https://x-access-token:${MAIN_REPO_PAT}@github.com/srkdev404-cyber/wysiwyg-editor-main.git \
             /tmp/wysiwyg-main
 
           echo "Syncing JavaScript files..."
-          rsync -av --delete /tmp/wysiwyg-main/js/ app/assets/javascripts/
+          rsync -av --delete \
+            /tmp/wysiwyg-main/js/ \
+            app/assets/javascripts/
 
           echo "Syncing CSS files..."
-          rsync -av --delete /tmp/wysiwyg-main/css/ app/assets/stylesheets/
+          rsync -av --delete \
+            /tmp/wysiwyg-main/css/ \
+            app/assets/stylesheets/
 
-      - name: Commit and push
+      # -------------------------------------------------
+      # Commit & push version + assets together
+      # -------------------------------------------------
+      - name: Commit and push changes
         run: |
           git config user.name "CI Bot"
           git config user.email "ci@github.com"
+
           git add \
             lib/wysiwyg-rails/version.rb \
             app/assets/javascripts \
             app/assets/stylesheets
-          git commit -m "chore: bump version to v${VERSION} and sync JS/CSS assets"
+
+          git commit -m "chore: bump version to v${VERSION} and sync JS/CSS from main repo"
           git push origin "$BRANCH"
 
+      # -------------------------------------------------
+      # Create Pull Request
+      # -------------------------------------------------
       - name: Create Pull Request
         env:
           GH_TOKEN: ${{ secrets.PAT }}
@@ -70,4 +98,4 @@ jobs:
             --base master \
             --head "$BRANCH" \
             --title "Release v${VERSION}" \
-            --body "Automated version bump to v${VERSION} and asset sync from main repo"
+            --body "Automated version bump to v${VERSION} and JS/CSS sync from main repo"
