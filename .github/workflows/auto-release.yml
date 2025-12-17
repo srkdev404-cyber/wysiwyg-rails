@@ -17,38 +17,39 @@ jobs:
     environment: PAT
 
     steps:
-      # ----------------------------------------
-      # Require "release: yes"
-      # ----------------------------------------
+      # -------------------------------------------------
+      # Check release intent (requires "release: yes")
+      # -------------------------------------------------
       - name: Check release intent
         id: check
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.PAT }}
           script: |
-            const text =
-              (context.payload.pull_request.title || '') + ' ' +
-              (context.payload.pull_request.body || '');
-            core.setOutput(
-              'release',
-              /release:\s*yes/i.test(text) ? 'true' : 'false'
-            );
+            const title = context.payload.pull_request.title || '';
+            const body  = context.payload.pull_request.body  || '';
+            const text  = `${title} ${body}`;
 
-      - name: Stop if not release
+            const isRelease = /release:\s*yes/i.test(text);
+            core.setOutput('release', isRelease ? 'true' : 'false');
+
+      - name: Stop if not a release
         if: steps.check.outputs.release == 'false'
-        run: exit 0
+        run: |
+          echo "Not a release PR. Skipping auto-release."
+          exit 0
 
-      # ----------------------------------------
-      # Checkout merged code
-      # ----------------------------------------
+      # -------------------------------------------------
+      # Checkout merged code (master)
+      # -------------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.PAT }}
 
-      # ----------------------------------------
-      # Read version safely (Ruby-based)
-      # ----------------------------------------
+      # -------------------------------------------------
+      # Read version safely from version.rb (Ruby-based)
+      # -------------------------------------------------
       - name: Read version
         run: |
           VERSION=$(ruby -e "
@@ -56,29 +57,32 @@ jobs:
             if content =~ /VERSION\s*=\s*['\"]([^'\"]+)['\"]/
               puts \$1
             else
+              STDERR.puts 'VERSION not found'
               exit 1
             end
           ")
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Version: $VERSION"
 
-      # ----------------------------------------
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Detected version: $VERSION"
+
+      # -------------------------------------------------
       # Setup Ruby
-      # ----------------------------------------
+      # -------------------------------------------------
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.1'
 
-      # ----------------------------------------
-      # Build gem ONLY (no push)
-      # ----------------------------------------
+      # -------------------------------------------------
+      # Build gem ONLY (no RubyGems publish)
+      # -------------------------------------------------
       - name: Build gem
-        run: gem build wysiwyg-rails.gemspec
+        run: |
+          gem build wysiwyg-rails.gemspec
 
-      # ----------------------------------------
-      # Create GitHub Release and attach gem
-      # ----------------------------------------
+      # -------------------------------------------------
+      # Create GitHub Release (NO manual tags)
+      # -------------------------------------------------
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
