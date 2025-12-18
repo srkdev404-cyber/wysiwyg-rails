@@ -1,5 +1,5 @@
 module WYSIWYG
   module Rails
-    VERSION = "9.9.0"
+    VERSION = "4.7.33"
   end
 end
