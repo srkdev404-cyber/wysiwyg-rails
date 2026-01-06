@@ -1,0 +1,1 @@
+wysiwyg-rails-child-A auto generated release removed, it will be app to primary repo
