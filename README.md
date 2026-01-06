@@ -40,7 +40,6 @@ options :  value
 });
 ```
 ## Include in assets
-
 In your `application.css.scss`, include the css file:
 
 ```css
