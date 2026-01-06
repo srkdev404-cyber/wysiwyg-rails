@@ -8,7 +8,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   release:
@@ -17,78 +16,64 @@ jobs:
     environment: PAT
 
     steps:
-      # -------------------------------------------------
-      # Check release intent (requires "release: yes")
-      # -------------------------------------------------
+      # --------------------------------------------
+      # Check release intent
+      # --------------------------------------------
       - name: Check release intent
         id: check
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.PAT }}
           script: |
-            const title = context.payload.pull_request.title || '';
-            const body  = context.payload.pull_request.body  || '';
-            const text  = `${title} ${body}`;
-
-            const isRelease = /release:\s*yes/i.test(text);
-            core.setOutput('release', isRelease ? 'true' : 'false');
+            const text = `${context.payload.pull_request.title} ${context.payload.pull_request.body}`;
+            core.setOutput('release', /release:\s*yes/i.test(text) ? 'true' : 'false');
 
       - name: Stop if not a release
         if: steps.check.outputs.release == 'false'
-        run: |
-          echo "Not a release PR. Skipping auto-release."
-          exit 0
+        run: exit 0
 
-      # -------------------------------------------------
-      # Checkout merged code (master)
-      # -------------------------------------------------
+      # --------------------------------------------
+      # Checkout merged code
+      # --------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.PAT }}
 
-      # -------------------------------------------------
-      # Read version safely from version.rb (Ruby-based)
-      # -------------------------------------------------
+      # --------------------------------------------
+      # Read version from version.rb
+      # --------------------------------------------
       - name: Read version
         run: |
           VERSION=$(ruby -e "
             content = File.read('lib/wysiwyg-rails/version.rb')
-            if content =~ /VERSION\s*=\s*['\"]([^'\"]+)['\"]/
-              puts \$1
-            else
-              STDERR.puts 'VERSION not found'
-              exit 1
-            end
+            puts content.match(/VERSION\s*=\s*['\"]([^'\"]+)['\"]/)[1]
           ")
-
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Detected version: $VERSION"
 
-      # -------------------------------------------------
+      # --------------------------------------------
       # Setup Ruby
-      # -------------------------------------------------
+      # --------------------------------------------
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.1'
 
-      # -------------------------------------------------
-      # Build gem ONLY (no RubyGems publish)
-      # -------------------------------------------------
+      # --------------------------------------------
+      # Build gem
+      # --------------------------------------------
       - name: Build gem
-        run: |
-          gem build wysiwyg-rails.gemspec
+        run: gem build wysiwyg-rails.gemspec
 
-      # -------------------------------------------------
-      # Create GitHub Release (NO manual tags)
-      # -------------------------------------------------
+      # --------------------------------------------
+      # Create GitHub Release (NO auto notes)
+      # --------------------------------------------
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: "rails-v${{ env.VERSION }}"
           name: "Rails Release v${{ env.VERSION }}"
+          body_path: release_notes.txt
           files: "*.gem"
-          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.PAT }}
