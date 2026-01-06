@@ -14,66 +14,56 @@ jobs:
     environment: PAT
 
     steps:
-      # -------------------------------------------------
-      # Checkout Child-A (Rails) repository
-      # -------------------------------------------------
+      # --------------------------------------------
+      # Checkout repository
+      # --------------------------------------------
       - name: Checkout Rails repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.PAT }}
 
-      # -------------------------------------------------
-      # Load version from dispatch payload
-      # -------------------------------------------------
-      - name: Load version from dispatch
+      # --------------------------------------------
+      # Load version & release notes
+      # --------------------------------------------
+      - name: Load payload
         run: |
           echo "VERSION=${{ github.event.client_payload.version }}" >> $GITHUB_ENV
-          echo "Incoming version: $VERSION"
+          echo "${{ github.event.client_payload.release_notes }}" > release_notes.txt
 
-      # -------------------------------------------------
+      # --------------------------------------------
       # Create release branch
-      # -------------------------------------------------
+      # --------------------------------------------
       - name: Create release branch
         run: |
           BRANCH="release-v${VERSION}"
           git checkout -b "$BRANCH"
           echo "BRANCH=$BRANCH" >> $GITHUB_ENV
 
-      # -------------------------------------------------
-      # Update Rails version.rb
-      # -------------------------------------------------
+      # --------------------------------------------
+      # Update version.rb
+      # --------------------------------------------
       - name: Update version.rb
         run: |
           sed -i "s/[0-9]\+\.[0-9]\+\.[0-9]\+/$VERSION/" \
             lib/wysiwyg-rails/version.rb
 
-      # -------------------------------------------------
-      # Sync JS/CSS from main repo AFTER version update
-      # -------------------------------------------------
-      - name: Sync JS/CSS from main repo into app/assets
+      # --------------------------------------------
+      # Sync JS/CSS from primary repo
+      # --------------------------------------------
+      - name: Sync JS/CSS from primary repo
         env:
           MAIN_REPO_PAT: ${{ secrets.PAT }}
         run: |
-          set -e
-
-          echo "Cloning main repo with authentication..."
           git clone --depth 1 \
             https://x-access-token:${MAIN_REPO_PAT}@github.com/srkdev404-cyber/wysiwyg-editor-primary.git \
             /tmp/wysiwyg-main
 
-          echo "Syncing JavaScript files..."
-          rsync -av --delete \
-            /tmp/wysiwyg-main/js/ \
-            app/assets/javascripts/
+          rsync -av --delete /tmp/wysiwyg-main/js/ app/assets/javascripts/
+          rsync -av --delete /tmp/wysiwyg-main/css/ app/assets/stylesheets/
 
-          echo "Syncing CSS files..."
-          rsync -av --delete \
-            /tmp/wysiwyg-main/css/ \
-            app/assets/stylesheets/
-
-      # -------------------------------------------------
-      # Commit & push version + assets together
-      # -------------------------------------------------
+      # --------------------------------------------
+      # Commit & push
+      # --------------------------------------------
       - name: Commit and push changes
         run: |
           git config user.name "srkdev404-cyber"
@@ -82,14 +72,15 @@ jobs:
           git add \
             lib/wysiwyg-rails/version.rb \
             app/assets/javascripts \
-            app/assets/stylesheets
+            app/assets/stylesheets \
+            release_notes.txt
 
-          git commit -m "chore: bump version to v${VERSION} and sync JS/CSS from main repo"
+          git commit -m "chore: release v${VERSION} (sync version, assets, and release notes)"
           git push origin "$BRANCH"
 
-      # -------------------------------------------------
+      # --------------------------------------------
       # Create Pull Request
-      # -------------------------------------------------
+      # --------------------------------------------
       - name: Create Pull Request
         env:
           GH_TOKEN: ${{ secrets.PAT }}
@@ -98,4 +89,4 @@ jobs:
             --base master \
             --head "$BRANCH" \
             --title "Release v${VERSION}" \
-            --body "Automated version bump to v${VERSION} and JS/CSS sync from main repo"
+            --body "release: yes"
