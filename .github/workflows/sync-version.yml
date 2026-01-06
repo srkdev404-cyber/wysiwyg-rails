@@ -58,7 +58,7 @@ jobs:
 
           echo "Cloning main repo with authentication..."
           git clone --depth 1 \
-            https://x-access-token:${MAIN_REPO_PAT}@github.com/srkdev404-cyber/wysiwyg-editor-main.git \
+            https://x-access-token:${MAIN_REPO_PAT}@github.com/srkdev404-cyber/wysiwyg-editor-primary.git \
             /tmp/wysiwyg-main
 
           echo "Syncing JavaScript files..."
