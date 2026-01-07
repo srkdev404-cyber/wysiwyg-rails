@@ -1,1 +1,1 @@
-- Hi created a text file in CSS
+Deleting text file from css
