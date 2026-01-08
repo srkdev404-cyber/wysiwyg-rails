@@ -15,15 +15,16 @@ jobs:
 
     steps:
       # --------------------------------------------
-      # Checkout repository
+      # Checkout repository (full history needed)
       # --------------------------------------------
       - name: Checkout Rails repository
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.PAT }}
+          fetch-depth: 0
 
       # --------------------------------------------
-      # Load version & release notes
+      # Load version & release notes from payload
       # --------------------------------------------
       - name: Load payload
         run: |
@@ -31,13 +32,23 @@ jobs:
           echo "${{ github.event.client_payload.release_notes }}" > release_notes.txt
 
       # --------------------------------------------
-      # Create release branch
+      # Prepare release branch (SAFE & IDEMPOTENT)
       # --------------------------------------------
-      - name: Create release branch
+      - name: Prepare release branch
         run: |
           BRANCH="release-v${VERSION}"
-          git checkout -b "$BRANCH"
           echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+
+          git fetch origin
+
+          if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
+            echo "Release branch already exists. Reusing it."
+            git checkout "$BRANCH"
+            git pull origin "$BRANCH"
+          else
+            echo "Creating new release branch $BRANCH"
+            git checkout -b "$BRANCH"
+          fi
 
       # --------------------------------------------
       # Update version.rb
@@ -62,7 +73,7 @@ jobs:
           rsync -av --delete /tmp/wysiwyg-main/css/ app/assets/stylesheets/
 
       # --------------------------------------------
-      # Commit & push
+      # Commit & push changes (safe on reruns)
       # --------------------------------------------
       - name: Commit and push changes
         run: |
@@ -75,11 +86,12 @@ jobs:
             app/assets/stylesheets \
             release_notes.txt
 
-          git commit -m "chore: release v${VERSION} (sync version, assets, and release notes)"
+          git commit -m "chore: release v${VERSION} (sync version, assets, and release notes)" || echo "Nothing to commit"
+
           git push origin "$BRANCH"
 
       # --------------------------------------------
-      # Create Pull Request
+      # Create Pull Request (idempotent)
       # --------------------------------------------
       - name: Create Pull Request
         env:
@@ -89,4 +101,5 @@ jobs:
             --base master \
             --head "$BRANCH" \
             --title "Release v${VERSION}" \
-            --body "release: yes"
+            --body "release: yes" \
+            || echo "Pull request already exists"
