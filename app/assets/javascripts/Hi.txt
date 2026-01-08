@@ -1,0 +1,2 @@
+Hello Celestial!
+Added a new file in JS folder to test.
