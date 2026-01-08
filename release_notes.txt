@@ -1,2 +1,2 @@
-Hello Celestial!
-Update hello.txt in JSS for testing
+Hello
+TESTChild-A 
