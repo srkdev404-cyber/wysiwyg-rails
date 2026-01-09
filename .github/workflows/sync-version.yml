@@ -11,11 +11,10 @@ permissions:
 jobs:
   sync:
     runs-on: ubuntu-latest
-    environment: PAT
 
     steps:
       # --------------------------------------------
-      # Checkout repository (full history needed)
+      # Checkout Rails repository (full history)
       # --------------------------------------------
       - name: Checkout Rails repository
         uses: actions/checkout@v4
@@ -28,11 +27,26 @@ jobs:
       # --------------------------------------------
       - name: Load payload
         run: |
-          echo "VERSION=${{ github.event.client_payload.version }}" >> $GITHUB_ENV
+          VERSION="${{ github.event.client_payload.version }}"
+          VERSION="${VERSION//,/\.}"
+
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "${{ github.event.client_payload.release_notes }}" > release_notes.txt
 
+          echo "Incoming version: $VERSION"
+
       # --------------------------------------------
-      # Prepare release branch (SAFE & IDEMPOTENT)
+      # Validate SemVer (fail fast)
+      # --------------------------------------------
+      - name: Validate version format
+        run: |
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid version format: $VERSION"
+            exit 1
+          fi
+
+      # --------------------------------------------
+      # Prepare release branch (safe & idempotent)
       # --------------------------------------------
       - name: Prepare release branch
         run: |
@@ -55,18 +69,16 @@ jobs:
       # --------------------------------------------
       - name: Update version.rb
         run: |
-          sed -i "s/[0-9]\+\.[0-9]\+\.[0-9]\+/$VERSION/" \
+          sed -i -E "s/[0-9]+[.,][0-9]+[.,][0-9]+/$VERSION/" \
             lib/wysiwyg-rails/version.rb
 
       # --------------------------------------------
       # Sync JS/CSS from primary repo
       # --------------------------------------------
       - name: Sync JS/CSS from primary repo
-        env:
-          MAIN_REPO_PAT: ${{ secrets.PAT }}
         run: |
           git clone --depth 1 \
-            https://x-access-token:${MAIN_REPO_PAT}@github.com/srkdev404-cyber/wysiwyg-editor-primary.git \
+            https://x-access-token:${{ secrets.PAT }}@github.com/srkdev404-cyber/wysiwyg-editor-primary.git \
             /tmp/wysiwyg-main
 
           rsync -av --delete /tmp/wysiwyg-main/js/ app/assets/javascripts/
@@ -86,7 +98,8 @@ jobs:
             app/assets/stylesheets \
             release_notes.txt
 
-          git commit -m "chore: release v${VERSION} (sync version, assets, and release notes)" || echo "Nothing to commit"
+          git commit -m "chore: release v${VERSION} (sync version, assets, and release notes)" \
+            || echo "Nothing to commit"
 
           git push origin "$BRANCH"
 
