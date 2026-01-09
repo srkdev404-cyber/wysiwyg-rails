@@ -13,7 +13,6 @@ jobs:
   release:
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
-    environment: PAT
 
     steps:
       # --------------------------------------------
@@ -25,7 +24,10 @@ jobs:
         with:
           github-token: ${{ secrets.PAT }}
           script: |
-            const text = `${context.payload.pull_request.title} ${context.payload.pull_request.body}`;
+            const title = context.payload.pull_request.title || '';
+            const body  = context.payload.pull_request.body || '';
+            const text  = `${title} ${body}`;
+
             core.setOutput(
               'release',
               /release:\s*yes/i.test(text) ? 'true' : 'false'
@@ -53,21 +55,18 @@ jobs:
         run: |
           VERSION=$(ruby -e "
             content = File.read('lib/wysiwyg-rails/version.rb')
-            puts content.match(/VERSION\s*=\s*['\"]([^'\"]+)['\"]/)[1]
+            match = content.match(/VERSION\s*=\s*['\"]([^'\"]+)['\"]/)
+            abort('VERSION not found') unless match
+            puts match[1]
           ")
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      # --------------------------------------------
-      # Normalize version (comma → dot)
-      # --------------------------------------------
-      - name: Normalize version
-        run: |
           VERSION="${VERSION//,/\.}"
+
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Normalized version: $VERSION"
+          echo "Resolved version: $VERSION"
 
       # --------------------------------------------
-      # Validate SemVer format (STRICT)
+      # Validate SemVer (strict, fail fast)
       # --------------------------------------------
       - name: Validate version format
         run: |
@@ -92,7 +91,7 @@ jobs:
           gem build wysiwyg-rails.gemspec
 
       # --------------------------------------------
-      # Create GitHub Release (no auto-generated notes)
+      # Create GitHub Release (NO auto-generated notes)
       # --------------------------------------------
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
