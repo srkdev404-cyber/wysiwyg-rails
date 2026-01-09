@@ -73,12 +73,14 @@ jobs:
             lib/wysiwyg-rails/version.rb
 
       # --------------------------------------------
-      # Sync JS/CSS from primary repo
+      # Sync JS/CSS from primary repo (FIXED)
       # --------------------------------------------
       - name: Sync JS/CSS from primary repo
+        env:
+          GIT_TOKEN: ${{ secrets.PAT }}
         run: |
           git clone --depth 1 \
-            https://x-access-token:${{ secrets.PAT }}@github.com/srkdev404-cyber/wysiwyg-editor-primary.git \
+            "https://x-access-token:${GIT_TOKEN}@github.com/srkdev404-cyber/wysiwyg-editor-primary.git" \
             /tmp/wysiwyg-main
 
           rsync -av --delete /tmp/wysiwyg-main/js/ app/assets/javascripts/
