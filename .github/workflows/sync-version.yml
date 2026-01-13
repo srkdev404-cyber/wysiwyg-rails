@@ -13,106 +13,46 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # --------------------------------------------
-      # Checkout Rails repository (full history)
-      # --------------------------------------------
-      - name: Checkout Rails repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           token: ${{ secrets.PAT }}
           fetch-depth: 0
 
-      # --------------------------------------------
-      # Load version & release notes from payload
-      # --------------------------------------------
-      - name: Load payload
+      - name: Load & validate version
         run: |
           VERSION="${{ github.event.client_payload.version }}"
-          VERSION="${VERSION//,/\.}"
 
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "${{ github.event.client_payload.release_notes }}" > release_notes.txt
-
-          echo "Incoming version: $VERSION"
-
-      # --------------------------------------------
-      # Validate SemVer (with prerelease support)
-      # --------------------------------------------
-      - name: Validate version format
-        run: |
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "❌ Invalid version format: $VERSION"
-            echo "Expected formats:"
-            echo "  X.Y.Z"
-            echo "  X.Y.Z-alpha | beta | rc.1"
+            echo "Invalid version: $VERSION"
             exit 1
           fi
 
-      # --------------------------------------------
-      # Prepare release branch (safe & idempotent)
-      # --------------------------------------------
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
       - name: Prepare release branch
         run: |
           BRANCH="release-v${VERSION}"
           echo "BRANCH=$BRANCH" >> $GITHUB_ENV
 
           git fetch origin
+          git checkout -B "$BRANCH"
 
-          if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
-            echo "Release branch already exists. Reusing it."
-            git checkout "$BRANCH"
-            git pull origin "$BRANCH"
-          else
-            echo "Creating new release branch $BRANCH"
-            git checkout -b "$BRANCH"
-          fi
-
-      # --------------------------------------------
-      # Update version.rb (supports prerelease)
-      # --------------------------------------------
       - name: Update version.rb
         run: |
           sed -i -E \
             "s/VERSION\s*=\s*['\"][^'\"]+['\"]/VERSION = '${VERSION}'/" \
             lib/wysiwyg-rails/version.rb
 
-      # --------------------------------------------
-      # Sync JS/CSS from primary repo
-      # --------------------------------------------
-      - name: Sync JS/CSS from primary repo
-        env:
-          GIT_TOKEN: ${{ secrets.PAT }}
-        run: |
-          git clone --depth 1 \
-            "https://x-access-token:${GIT_TOKEN}@github.com/srkdev404-cyber/wysiwyg-editor-primary.git" \
-            /tmp/wysiwyg-main
-
-          rsync -av --delete /tmp/wysiwyg-main/js/ app/assets/javascripts/
-          rsync -av --delete /tmp/wysiwyg-main/css/ app/assets/stylesheets/
-
-      # --------------------------------------------
-      # Commit & push changes (safe on reruns)
-      # --------------------------------------------
-      - name: Commit and push changes
+      - name: Commit & push
         run: |
           git config user.name "srkdev404-cyber"
           git config user.email "srkdev404@gmail.com"
 
-          git add \
-            lib/wysiwyg-rails/version.rb \
-            app/assets/javascripts \
-            app/assets/stylesheets \
-            release_notes.txt
-
-          git commit -m "chore: release v${VERSION} (sync version, assets, and release notes)" \
-            || echo "Nothing to commit"
-
+          git add lib/wysiwyg-rails/version.rb
+          git commit -m "chore: release v${VERSION}" || echo "Nothing to commit"
           git push origin "$BRANCH"
 
-      # --------------------------------------------
-      # Create Pull Request (idempotent)
-      # --------------------------------------------
-      - name: Create Pull Request
+      - name: Create Pull Request (release notes live here)
         env:
           GH_TOKEN: ${{ secrets.PAT }}
         run: |
@@ -120,5 +60,11 @@ jobs:
             --base master \
             --head "$BRANCH" \
             --title "Release v${VERSION}" \
-            --body "release: yes" \
-            || echo "Pull request already exists"
+            --body "$(cat <<'EOF'
+release: yes
+
+## Release Notes (from primary repo)
+
+${{ github.event.client_payload.release_notes }}
+EOF
+)" || echo "PR already exists"
