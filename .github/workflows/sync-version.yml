@@ -14,7 +14,7 @@ jobs:
 
     steps:
       # --------------------------------------------
-      # Checkout Rails repository (full history)
+      # Checkout repository
       # --------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,24 +23,22 @@ jobs:
           fetch-depth: 0
 
       # --------------------------------------------
-      # Load & validate version from dispatch payload
+      # Load & validate version
       # --------------------------------------------
       - name: Load & validate version
         run: |
           VERSION="${{ github.event.client_payload.version }}"
           VERSION="${VERSION//,/\.}"
 
-          # SemVer 2.0.0 with optional prerelease
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "❌ Invalid version format: $VERSION"
+            echo "Invalid version: $VERSION"
             exit 1
           fi
 
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Incoming version: $VERSION"
 
       # --------------------------------------------
-      # Prepare release branch (safe & idempotent)
+      # Prepare release branch
       # --------------------------------------------
       - name: Prepare release branch
         run: |
@@ -50,16 +48,14 @@ jobs:
           git fetch origin
 
           if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
-            echo "Release branch exists. Reusing."
             git checkout "$BRANCH"
             git pull origin "$BRANCH"
           else
-            echo "Creating release branch $BRANCH"
             git checkout -b "$BRANCH"
           fi
 
       # --------------------------------------------
-      # Update version.rb (prerelease-safe)
+      # Update version.rb
       # --------------------------------------------
       - name: Update version.rb
         run: |
@@ -68,9 +64,9 @@ jobs:
             lib/wysiwyg-rails/version.rb
 
       # --------------------------------------------
-      # Sync JS/CSS from primary repo
+      # Sync assets from primary repo
       # --------------------------------------------
-      - name: Sync assets from primary repo
+      - name: Sync assets
         env:
           GIT_TOKEN: ${{ secrets.PAT }}
         run: |
@@ -82,9 +78,9 @@ jobs:
           rsync -av --delete /tmp/wysiwyg-main/css/ app/assets/stylesheets/
 
       # --------------------------------------------
-      # Commit & push changes (safe on reruns)
+      # Commit & push
       # --------------------------------------------
-      - name: Commit & push changes
+      - name: Commit & push
         run: |
           git config user.name "srkdev404-cyber"
           git config user.email "srkdev404@gmail.com"
@@ -98,19 +94,14 @@ jobs:
           git push origin "$BRANCH"
 
       # --------------------------------------------
-      # Create Pull Request (release notes in PR body)
+      # Create Pull Request (YAML-SAFE)
       # --------------------------------------------
       - name: Create Pull Request
         env:
           GH_TOKEN: ${{ secrets.PAT }}
           RELEASE_NOTES: ${{ github.event.client_payload.release_notes }}
         run: |
-          PR_BODY="release: yes
-
-## Release Notes (from primary repo)
-
-${RELEASE_NOTES}
-"
+          PR_BODY=$(printf "release: yes\n\n## Release Notes (from primary repo)\n\n%s\n" "$RELEASE_NOTES")
 
           gh pr create \
             --base master \
