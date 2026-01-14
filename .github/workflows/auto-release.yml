@@ -1,20 +1,44 @@
-name: Sync Version – Ruby SDK (Child-B)
+name: Auto Release – wysiwyg-rails
 
 on:
-  repository_dispatch:
-    types: [version_update]
+  pull_request:
+    types: [closed]
+    branches:
+      - master
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
-  sync:
+  release:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     steps:
       # --------------------------------------------
-      # Checkout repository
+      # Check release intent from PR title/body
+      # --------------------------------------------
+      - name: Check release intent
+        id: check
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.PAT }}
+          script: |
+            const title = context.payload.pull_request.title || '';
+            const body  = context.payload.pull_request.body || '';
+            const text  = `${title} ${body}`;
+
+            core.setOutput(
+              'release',
+              /release:\s*yes/i.test(text) ? 'true' : 'false'
+            );
+
+      - name: Stop if not a release PR
+        if: steps.check.outputs.release == 'false'
+        run: exit 0
+
+      # --------------------------------------------
+      # Checkout merged code (full history)
       # --------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,89 +47,50 @@ jobs:
           fetch-depth: 0
 
       # --------------------------------------------
-      # Load & validate version
+      # Read & validate version from version.rb
       # --------------------------------------------
-      - name: Load & validate version
+      - name: Read & validate version
         run: |
-          VERSION="${{ github.event.client_payload.version }}"
+          VERSION=$(ruby -e "
+            content = File.read('lib/wysiwyg-rails/version.rb')
+            match = content.match(/VERSION\s*=\s*['\"]([^'\"]+)['\"]/)
+            abort('VERSION not found') unless match
+            puts match[1]
+          ")
+
           VERSION="${VERSION//,/\.}"
 
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid version: $VERSION"
+            echo "Invalid version format: $VERSION"
             exit 1
           fi
 
           echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Resolved version: $VERSION"
 
       # --------------------------------------------
-      # Prepare release branch
+      # Setup Ruby
       # --------------------------------------------
-      - name: Prepare release branch
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.1'
+
+      # --------------------------------------------
+      # Build gem
+      # --------------------------------------------
+      - name: Build gem
         run: |
-          BRANCH="release-v${VERSION}"
-          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
-
-          git fetch origin
-
-          if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
-            git checkout "$BRANCH"
-            git pull origin "$BRANCH"
-          else
-            git checkout -b "$BRANCH"
-          fi
+          gem build wysiwyg-rails.gemspec
 
       # --------------------------------------------
-      # Update version.rb (Ruby SDK style)
+      # Create GitHub Release (PR body → release body)
       # --------------------------------------------
-      - name: Update version.rb
-        run: |
-          FILE="lib/froala-editor-sdk/version.rb"
-
-          MAJOR=$(echo "$VERSION" | cut -d. -f1)
-          MINOR=$(echo "$VERSION" | cut -d. -f2)
-          PATCH=$(echo "$VERSION" | cut -d. -f3 | cut -d- -f1)
-
-          sed -i "s/Major = .*/Major = ${MAJOR}/" "$FILE"
-          sed -i "s/Minor = .*/Minor = ${MINOR}/" "$FILE"
-          sed -i "s/Tiny  = .*/Tiny  = ${PATCH}/" "$FILE"
-
-      # --------------------------------------------
-      # Update gemspec version
-      # --------------------------------------------
-      - name: Update gemspec version
-        run: |
-          sed -i -E \
-            "s/spec.version\s*=.*/spec.version = '${VERSION}'/" \
-            wysiwyg-editor-ruby-sdk.gemspec
-
-      # --------------------------------------------
-      # Commit & push
-      # --------------------------------------------
-      - name: Commit & push
-        run: |
-          git config user.name "srkdev404-cyber"
-          git config user.email "srkdev404@gmail.com"
-
-          git add \
-            lib/froala-editor-sdk/version.rb \
-            wysiwyg-editor-ruby-sdk.gemspec
-
-          git commit -m "chore: release v${VERSION} (Ruby SDK)" || echo "Nothing to commit"
-          git push origin "$BRANCH"
-
-      # --------------------------------------------
-      # Create Pull Request (YAML-safe, notes in PR)
-      # --------------------------------------------
-      - name: Create Pull Request
+      - name: Create GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
-          RELEASE_NOTES: ${{ github.event.client_payload.release_notes }}
+          GITHUB_TOKEN: ${{ secrets.PAT }}
         run: |
-          PR_BODY=$(printf "release: yes\n\n## Release Notes (from primary repo)\n\n%s\n" "$RELEASE_NOTES")
-
-          gh pr create \
-            --base master \
-            --head "$BRANCH" \
-            --title "Release v${VERSION}" \
-            --body "$PR_BODY" \
-            || echo "Pull request already exists"
+          gh release create "rails-v${VERSION}" \
+            --title "Rails Release v${VERSION}" \
+            --notes "${{ github.event.pull_request.body }}" \
+            *.gem
