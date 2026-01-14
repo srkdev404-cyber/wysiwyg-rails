@@ -15,48 +15,82 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # --------------------------------------------
+      # Check release intent from PR title/body
+      # --------------------------------------------
       - name: Check release intent
         id: check
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.PAT }}
           script: |
-            const text =
-              (context.payload.pull_request.title || '') + ' ' +
-              (context.payload.pull_request.body || '');
+            const title = context.payload.pull_request.title || '';
+            const body  = context.payload.pull_request.body || '';
+            const text  = `${title} ${body}`;
+
             core.setOutput(
               'release',
               /release:\s*yes/i.test(text) ? 'true' : 'false'
             );
 
-      - if: steps.check.outputs.release == 'false'
+      - name: Stop if not a release PR
+        if: steps.check.outputs.release == 'false'
         run: exit 0
 
-      - uses: actions/checkout@v4
+      # --------------------------------------------
+      # Checkout merged code (full history)
+      # --------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           token: ${{ secrets.PAT }}
           fetch-depth: 0
 
-      - name: Read version
+      # --------------------------------------------
+      # Read & validate version from version.rb
+      # --------------------------------------------
+      - name: Read & validate version
         run: |
           VERSION=$(ruby -e "
-            puts File.read('lib/wysiwyg-rails/version.rb')
-              .match(/VERSION\s*=\s*['\"]([^'\"]+)['\"]/)[1]
+            content = File.read('lib/wysiwyg-rails/version.rb')
+            match = content.match(/VERSION\s*=\s*['\"]([^'\"]+)['\"]/)
+            abort('VERSION not found') unless match
+            puts match[1]
           ")
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-      - uses: ruby/setup-ruby@v1
+          VERSION="${VERSION//,/\.}"
+
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid version format: $VERSION"
+            exit 1
+          fi
+
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Resolved version: $VERSION"
+
+      # --------------------------------------------
+      # Setup Ruby
+      # --------------------------------------------
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
         with:
           ruby-version: '3.1'
 
-      - run: gem build wysiwyg-rails.gemspec
+      # --------------------------------------------
+      # Build gem
+      # --------------------------------------------
+      - name: Build gem
+        run: |
+          gem build wysiwyg-rails.gemspec
 
-      - name: Create GitHub Release (PR body → release body)
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: "rails-v${{ env.VERSION }}"
-          name: "Rails Release v${{ env.VERSION }}"
-          body: ${{ github.event.pull_request.body }}
-          files: "*.gem"
+      # --------------------------------------------
+      # Create GitHub Release (PR body → release body)
+      # --------------------------------------------
+      - name: Create GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.PAT }}
+        run: |
+          gh release create "rails-v${VERSION}" \
+            --title "Rails Release v${VERSION}" \
+            --notes "${{ github.event.pull_request.body }}" \
+            *.gem
