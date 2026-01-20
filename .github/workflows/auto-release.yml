@@ -38,7 +38,7 @@ jobs:
         run: exit 0
 
       # --------------------------------------------
-      # Checkout merged code (full history)
+      # Checkout merged code
       # --------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -47,7 +47,7 @@ jobs:
           fetch-depth: 0
 
       # --------------------------------------------
-      # Read & validate version from version.rb
+      # Read & validate version
       # --------------------------------------------
       - name: Read & validate version
         run: |
@@ -80,11 +80,10 @@ jobs:
       # Build gem
       # --------------------------------------------
       - name: Build gem
-        run: |
-          gem build wysiwyg-rails.gemspec
+        run: gem build wysiwyg-rails.gemspec
 
       # --------------------------------------------
-      # Create GitHub Release (PR body → release body)
+      # Create GitHub Release (NO NOTES)
       # --------------------------------------------
       - name: Create GitHub Release
         env:
@@ -92,5 +91,5 @@ jobs:
         run: |
           gh release create "v${VERSION}" \
             --title "Release ${VERSION}" \
-            --notes "${{ github.event.pull_request.body }}" \
+            --notes "" \
             *.gem
