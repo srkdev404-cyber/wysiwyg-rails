@@ -11,57 +11,59 @@ permissions:
 
 jobs:
   release:
-    # Run only if PR was merged
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     steps:
       # --------------------------------------------
-      # Validate release intent (release: yes)
+      # Validate release intent
       # --------------------------------------------
       - name: Validate release intent
         id: intent
         uses: actions/github-script@v6
         with:
           script: |
+            const body = context.payload.pull_request.body || '';
             const title = context.payload.pull_request.title || '';
-            const body  = context.payload.pull_request.body || '';
-            const text  = `${title}\n${body}`;
+            const text = `${title}\n${body}`;
 
-            const isRelease = /release:\s*yes/i.test(text);
-            core.setOutput('release', isRelease ? 'true' : 'false');
+            core.setOutput(
+              'release',
+              /release:\s*yes/i.test(text) ? 'true' : 'false'
+            );
 
       - name: Stop if not a release PR
         if: steps.intent.outputs.release == 'false'
         run: |
-          echo "❌ Not a release PR. Skipping auto-release."
+          echo "Not a release PR. Skipping."
           exit 0
 
       # --------------------------------------------
-      # Extract & validate version + notes
+      # Extract version & clean release notes
       # --------------------------------------------
-      - name: Load version & release notes
+      - name: Extract version & notes
         run: |
-          NOTES="${{ github.event.pull_request.body }}"
+          PR_BODY="${{ github.event.pull_request.body }}"
 
-          # Extract version from PR body: version: x.y.z
-          VERSION=$(echo "$NOTES" | grep -iE '^version:\s*' | head -n1 | sed -E 's/version:\s*//i')
+          # Extract version (version: x.y.z)
+          VERSION=$(echo "$PR_BODY" | grep -iE '^version:\s*' | head -n1 | sed -E 's/version:\s*//i')
 
           if [ -z "$VERSION" ]; then
-            echo "❌ Version not found in PR body (expected: version: x.y.z)"
+            echo "Version not found (expected: version: x.y.z)"
             exit 1
           fi
 
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "❌ Invalid version format: $VERSION"
+            echo "Invalid version format: $VERSION"
             exit 1
           fi
 
-          echo "✅ Releasing version: $VERSION"
+          # Remove control lines from release notes
+          CLEAN_NOTES=$(echo "$PR_BODY" | sed '/^release:\s*/Id;/^version:\s*/Id')
 
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
-          echo "$NOTES" >> $GITHUB_ENV
+          echo "$CLEAN_NOTES" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
 
       # --------------------------------------------
@@ -88,7 +90,7 @@ jobs:
         run: gem build wysiwyg-rails.gemspec
 
       # --------------------------------------------
-      # Create GitHub Release
+      # Create GitHub Release (Screenshot-perfect)
       # --------------------------------------------
       - name: Create GitHub Release
         env:
@@ -97,5 +99,5 @@ jobs:
           gh release create "v${VERSION}" \
             --title "Release ${VERSION}" \
             --notes "$RELEASE_NOTES" \
-            --generate-notes=false \
+            --latest \
             *.gem
