@@ -11,13 +11,12 @@ permissions:
 
 jobs:
   release:
-    # Run only if PR is merged
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     steps:
       # --------------------------------------------
-      # Check release intent (release: yes)
+      # Check release intent
       # --------------------------------------------
       - name: Check release intent
         id: check
@@ -38,88 +37,18 @@ jobs:
           exit 0
 
       # --------------------------------------------
-      # Extract version & release notes from PR
+      # Extract version & release notes
       # --------------------------------------------
       - name: Load version & release notes
         run: |
           NOTES="${{ github.event.pull_request.body }}"
 
-          # Expect version like: version: 1.2.3
           VERSION=$(echo "$NOTES" | grep -iE '^version:\s*' | head -n1 | sed -E 's/version:\s*//i')
 
           if [ -z "$VERSION" ]; then
             echo "Version not found in PR body (expected: version: x.y.z)"
             exit 1
           fi
-
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid version format: $VERSION"
-            exit 1
-          fi
-
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
-          echo "$NOTES" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
-
-      # --------------------------------------------
-      # Checkout merged code
-      # --------------------------------------------
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.PAT }}
-          fetch-depth: 0
-
-      # --------------------------------------------
-      # Setup Ruby
-      # --------------------------------------------
-      - name: Setup Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: '3.1'
-
-      # --------------------------------------------
-      # Build gem
-      # --------------------------------------------
-      - name: Build gem
-        run: gem build wysiwyg-rails.gemspec
-
-      # --------------------------------------------
-      # Create GitHub Release
-      # --------------------------------------------
-      - name: Create GitHub Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.PAT }}
-        run: |
-          gh release create "v${VERSION}" \
-            --title "Release ${VERSION}" \
-            --notes "$RELEASE_NOTES" \
-            --generate-notes=false \
-            *.gem
-name: Auto Release – wysiwyg-rails
-
-on:
-  repository_dispatch:
-    types: [version_update]
-
-permissions:
-  contents: write
-
-jobs:
-  release:
-    runs-on: ubuntu-latest
-
-    steps:
-      # --------------------------------------------
-      # Load version & release notes from primary repo
-      # --------------------------------------------
-      - name: Load version & notes
-        run: |
-          VERSION="${{ github.event.client_payload.version }}"
-          NOTES="${{ github.event.client_payload.release_notes }}"
-
-          VERSION="${VERSION//,/\.}"
 
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "Invalid version format: $VERSION"
@@ -155,7 +84,7 @@ jobs:
         run: gem build wysiwyg-rails.gemspec
 
       # --------------------------------------------
-      # Create GitHub Release (PRIMARY NOTES ONLY)
+      # Create GitHub Release
       # --------------------------------------------
       - name: Create GitHub Release
         env:
