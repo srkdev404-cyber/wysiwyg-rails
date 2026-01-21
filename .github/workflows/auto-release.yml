@@ -17,7 +17,7 @@ jobs:
 
     steps:
       # --------------------------------------------
-      # Validate release intent (release: yes)
+      # Validate release intent
       # --------------------------------------------
       - name: Validate release intent
         id: intent
@@ -57,7 +57,7 @@ jobs:
           ruby-version: '3.1'
 
       # --------------------------------------------
-      # Read version from version.rb (SOURCE OF TRUTH)
+      # Read version from version.rb (single source)
       # --------------------------------------------
       - name: Read version from version.rb
         run: |
@@ -83,8 +83,9 @@ jobs:
         run: |
           PR_BODY="${{ github.event.pull_request.body }}"
 
-          # Remove control lines
-          CLEAN_NOTES=$(echo "$PR_BODY" | sed '/^release:\s*/Id')
+          CLEAN_NOTES=$(echo "$PR_BODY" | sed \
+            -e '/^release:\s*/Id' \
+            -e '/^## Release Notes.*$/Id')
 
           echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
           echo "$CLEAN_NOTES" >> $GITHUB_ENV
@@ -97,7 +98,7 @@ jobs:
         run: gem build wysiwyg-rails.gemspec
 
       # --------------------------------------------
-      # Create GitHub Release (Screenshot-perfect)
+      # Create GitHub Release (UI-perfect)
       # --------------------------------------------
       - name: Create GitHub Release
         env:
