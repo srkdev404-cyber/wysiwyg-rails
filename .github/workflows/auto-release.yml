@@ -11,21 +11,22 @@ permissions:
 
 jobs:
   release:
+    # Only run if PR was merged
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     steps:
       # --------------------------------------------
-      # Validate release intent
+      # Validate release intent (release: yes)
       # --------------------------------------------
       - name: Validate release intent
         id: intent
         uses: actions/github-script@v6
         with:
           script: |
-            const body = context.payload.pull_request.body || '';
+            const body  = context.payload.pull_request.body || '';
             const title = context.payload.pull_request.title || '';
-            const text = `${title}\n${body}`;
+            const text  = `${title}\n${body}`;
 
             core.setOutput(
               'release',
@@ -35,36 +36,8 @@ jobs:
       - name: Stop if not a release PR
         if: steps.intent.outputs.release == 'false'
         run: |
-          echo "Not a release PR. Skipping."
+          echo "Not a release PR. Skipping auto-release."
           exit 0
-
-      # --------------------------------------------
-      # Extract version & clean release notes
-      # --------------------------------------------
-      - name: Extract version & notes
-        run: |
-          PR_BODY="${{ github.event.pull_request.body }}"
-
-          # Extract version (version: x.y.z)
-          VERSION=$(echo "$PR_BODY" | grep -iE '^version:\s*' | head -n1 | sed -E 's/version:\s*//i')
-
-          if [ -z "$VERSION" ]; then
-            echo "Version not found (expected: version: x.y.z)"
-            exit 1
-          fi
-
-          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid version format: $VERSION"
-            exit 1
-          fi
-
-          # Remove control lines from release notes
-          CLEAN_NOTES=$(echo "$PR_BODY" | sed '/^release:\s*/Id;/^version:\s*/Id')
-
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
-          echo "$CLEAN_NOTES" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
 
       # --------------------------------------------
       # Checkout merged code
@@ -84,13 +57,47 @@ jobs:
           ruby-version: '3.1'
 
       # --------------------------------------------
+      # Read version from version.rb (SOURCE OF TRUTH)
+      # --------------------------------------------
+      - name: Read version from version.rb
+        run: |
+          VERSION=$(ruby -e "require './lib/wysiwyg-rails/version'; puts Wysiwyg::Rails::VERSION")
+
+          if [ -z "$VERSION" ]; then
+            echo "Failed to read version from version.rb"
+            exit 1
+          fi
+
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid version format: $VERSION"
+            exit 1
+          fi
+
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "Releasing version $VERSION"
+
+      # --------------------------------------------
+      # Prepare clean release notes (PR body only)
+      # --------------------------------------------
+      - name: Prepare release notes
+        run: |
+          PR_BODY="${{ github.event.pull_request.body }}"
+
+          # Remove control lines
+          CLEAN_NOTES=$(echo "$PR_BODY" | sed '/^release:\s*/Id')
+
+          echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
+          echo "$CLEAN_NOTES" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+
+      # --------------------------------------------
       # Build gem
       # --------------------------------------------
       - name: Build gem
         run: gem build wysiwyg-rails.gemspec
 
       # --------------------------------------------
-      # Create GitHub Release (Screenshot-perfect)
+      # Create GitHub Release (Screenshot-accurate)
       # --------------------------------------------
       - name: Create GitHub Release
         env:
