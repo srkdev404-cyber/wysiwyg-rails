@@ -11,15 +11,16 @@ permissions:
 
 jobs:
   release:
+    # Run only if PR was merged
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     steps:
       # --------------------------------------------
-      # Check release intent
+      # Validate release intent (release: yes)
       # --------------------------------------------
-      - name: Check release intent
-        id: check
+      - name: Validate release intent
+        id: intent
         uses: actions/github-script@v6
         with:
           script: |
@@ -31,29 +32,32 @@ jobs:
             core.setOutput('release', isRelease ? 'true' : 'false');
 
       - name: Stop if not a release PR
-        if: steps.check.outputs.release == 'false'
+        if: steps.intent.outputs.release == 'false'
         run: |
-          echo "Not a release PR. Skipping auto-release."
+          echo "❌ Not a release PR. Skipping auto-release."
           exit 0
 
       # --------------------------------------------
-      # Extract version & release notes
+      # Extract & validate version + notes
       # --------------------------------------------
       - name: Load version & release notes
         run: |
           NOTES="${{ github.event.pull_request.body }}"
 
+          # Extract version from PR body: version: x.y.z
           VERSION=$(echo "$NOTES" | grep -iE '^version:\s*' | head -n1 | sed -E 's/version:\s*//i')
 
           if [ -z "$VERSION" ]; then
-            echo "Version not found in PR body (expected: version: x.y.z)"
+            echo "❌ Version not found in PR body (expected: version: x.y.z)"
             exit 1
           fi
 
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid version format: $VERSION"
+            echo "❌ Invalid version format: $VERSION"
             exit 1
           fi
+
+          echo "✅ Releasing version: $VERSION"
 
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "RELEASE_NOTES<<EOF" >> $GITHUB_ENV
@@ -61,7 +65,7 @@ jobs:
           echo "EOF" >> $GITHUB_ENV
 
       # --------------------------------------------
-      # Checkout code
+      # Checkout merged code
       # --------------------------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
