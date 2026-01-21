@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   release:
-    # Only run if PR was merged
+    # Run only when PR is merged
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
@@ -36,7 +36,7 @@ jobs:
       - name: Stop if not a release PR
         if: steps.intent.outputs.release == 'false'
         run: |
-          echo "Not a release PR. Skipping auto-release."
+          echo "ℹ️ Not a release PR. Skipping auto-release."
           exit 0
 
       # --------------------------------------------
@@ -61,23 +61,23 @@ jobs:
       # --------------------------------------------
       - name: Read version from version.rb
         run: |
-          VERSION=$(ruby -e "require './lib/wysiwyg-rails/version'; puts Wysiwyg::Rails::VERSION")
+          VERSION=$(ruby -e "require './lib/wysiwyg-rails/version'; puts WYSIWYG::Rails::VERSION")
 
           if [ -z "$VERSION" ]; then
-            echo "Failed to read version from version.rb"
+            echo "❌ Failed to read version from version.rb"
             exit 1
           fi
 
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid version format: $VERSION"
+            echo "❌ Invalid version format: $VERSION"
             exit 1
           fi
 
           echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Releasing version $VERSION"
+          echo "✅ Releasing version $VERSION"
 
       # --------------------------------------------
-      # Prepare clean release notes (PR body only)
+      # Prepare clean release notes
       # --------------------------------------------
       - name: Prepare release notes
         run: |
@@ -97,7 +97,7 @@ jobs:
         run: gem build wysiwyg-rails.gemspec
 
       # --------------------------------------------
-      # Create GitHub Release (Screenshot-accurate)
+      # Create GitHub Release (Screenshot-perfect)
       # --------------------------------------------
       - name: Create GitHub Release
         env:
