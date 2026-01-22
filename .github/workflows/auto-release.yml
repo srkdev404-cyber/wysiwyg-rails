@@ -92,13 +92,7 @@ jobs:
           echo "EOF" >> $GITHUB_ENV
 
       # --------------------------------------------
-      # Build gem
-      # --------------------------------------------
-      - name: Build gem
-        run: gem build wysiwyg-rails.gemspec
-
-      # --------------------------------------------
-      # Create GitHub Release (UI-perfect)
+      # Create GitHub Release (NO GEM ATTACHED)
       # --------------------------------------------
       - name: Create GitHub Release
         env:
@@ -107,5 +101,10 @@ jobs:
           gh release create "v${VERSION}" \
             --title "Release ${VERSION}" \
             --notes "$RELEASE_NOTES" \
-            --latest \
-            *.gem
+            --latest
+
+      # --------------------------------------------
+      # Build gem (for validation / future RubyGems flow)
+      # --------------------------------------------
+      - name: Build gem
+        run: gem build wysiwyg-rails.gemspec
