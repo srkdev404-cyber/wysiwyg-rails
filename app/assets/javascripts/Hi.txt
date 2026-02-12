@@ -1,3 +1,0 @@
-Hello Celestial!
-Added a new file in JS folder to test.
-Checking final release dispatch
